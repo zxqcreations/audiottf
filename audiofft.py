@@ -5,113 +5,120 @@ import pylab
 import numpy as np
 import cv2
 import time
+import subprocess
+from scipy.interpolate import spline
 
-# song = AudioSegment.from_mp3('e:\\matakimito.mp3')
-# song.export('e:\\test.wav',format='wav')
+# song = AudioSegment.from_mp3('e:\\test1.mp3')
+# song.export('e:\\test1.wav',format='wav')
 
-
+#raise IOError('123')
 
 wf  = wave.open('e:\\test.wav', 'rb')
+nframes = wf.getnframes()
+rate = wf.getframerate()
 p = pyaudio.PyAudio()
 stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
                 channels=wf.getnchannels(),
-                rate=int(8820*2.5),#rate=wf.getframerate(),
+                rate=int(rate/2),#rate=wf.getframerate(),
                 output=True)
-nframes = wf.getnframes()
-rate = wf.getframerate()
 print(rate)
 str_data = wf.readframes(nframes)
 wf.close()
-wave_data = np.fromstring(str_data, dtype=np.short)
-wave_data = wave_data.reshape((-1, 2)).T
+wave_data = np.fromstring(str_data, dtype=np.short).reshape((-1, 2)).T
 print(len(wave_data[0]))
-#N = 1152*10
-N = 44100
+N = rate
 start = 0
 df = rate/(N-1)
+inter = 10
+r = int(N/inter)
 #df=1
-freq = [df*n for n in range(0, 44100)]
-t_size = 4000/5
-img = np.zeros((int(0.75*t_size), int(t_size), 1))
-tem_f = np.zeros((int(t_size)), dtype=np.int16)
+freq = [df*n for n in range(0, rate)]
+t_size = 1366
+t_size_h = t_size*9/16
+c_d = int(t_size_h*0.5)
+img = np.zeros((int(t_size_h), int(t_size), 3))
+img_s = cv2.imread('e:\\bg.jpg')
+img_s = cv2.resize(img_s, (int(t_size), int(t_size_h)))
+fft_result = list()
+
+from_color = (33, 150, 243)
+end_color = (76, 175, 80)
+
 
 #fourcc = cv2.VideoWriter_fourcc(*'mjpg')
-#videoWriter = cv2.VideoWriter('e:\\test.avi', -1, 20, #*44100/11520,
-#                              (int(t_size), int(t_size*0.75)))
-
-tmp_wav = wave_data[0][0:8820]
-stream.write(bytes(tmp_wav))
+videoWriter = cv2.VideoWriter('e:\\test.avi', -1, inter, #*44100/11520,
+                              (int(t_size), int(t_size_h)))
+print('Strating FFT')
+t1 = time.time()*10
 while True:
-    f_cp = tem_f.copy()/2
-    img.fill(0)
-    #t1 = time.time()*10000
-    #print([start, start+N])
+    tem_f = list()
     wave_data2 = wave_data[0][start:start+N]
     if bytes(wave_data2) == '' or len(wave_data2)==0:
         break
-    c = np.fft.fft(wave_data2)*2/N
-    c = abs(c)
+    c = abs(np.fft.fft(wave_data2)*2/N)
     d = int(len(c)/2)
-    while freq[d]>4000:
+    while freq[d]>3000:
         d-=10
-    
-    #for j in range(0, 10):
-    #    for i in range(1, d-1):
-    #        if c[i]-c[i-1] < 0 and c[i]-c[i+1] < 0:
-    #            c[i] = (c[i-1]+c[i+1])/2
-    # tmp = np.zeros((1,d/50))
-    ind = 0
-    for i in range(0,d-10,10):
-        tem_f[ind]=int(np.sum(c[i:i+10])/10)
-        ind+=1
-        
-
-    # for i in range(0, len(c)):
-    #     c[i] = tmp[i+1]
-
-    #tmp = c.copy()
-    #print(c.max())
-
-    # img = np.zeros((2000, 4000, 1))
-    h=int(0.75*t_size/2)
-    '''
-    for p in range(0, 21):
-        img.fill(0)
-        for i in range(0, len(tem_f)-1):
-            if p<=10:
-                cv2.line(img, (i, int(f_cp[i]+(-f_cp[i]+tem_f[i])*p/10)+h),
-                         (i+1, int(f_cp[i+1]+(-f_cp[i+1]+tem_f[i+1])*p/10)+h),
-                         (1, 1, 1))
-            else:
-                cv2.line(img, (i, int(tem_f[i]+(-tem_f[i]+tem_f[i]/2)*(p-10)/10)+h),
-                         (i+1, int(tem_f[i+1]+(-tem_f[i+1]+tem_f[i+1]/2)*(p-10)/10)+h),
-                         (1, 1, 1))
-        #img = cv2.resize(img, (800, 400))
-        cv2.imshow('tes', img)
-        #videoWriter.write(img)
-        #cv2.waitKey(5)
-    '''
-    for i in range(0, len(tem_f)-1):
-        cv2.line(img, (i*2, int(-tem_f[i]/5)+h),
-                 ((i+1)*2, int(-tem_f[i+1]/5)+h), (1, 1, 1))
-    cv2.imshow('tes', img)
-    r = int(8820*2)
+    for i in range(0,d-inter,inter):
+        mf = int(np.sum(c[i:i+inter])/inter)
+        if mf > 1000:
+            mf = 1000
+        tem_f.append(mf)
+    #x_o = np.linspace(0,len(tem_f)-1, len(tem_f))
+    #x = np.linspace(0, len(tem_f)-1, t_size-1)
+    #y = spline(x_o, np.asarray(tem_f), x)
+    fft_result.append(tem_f)
     start += r
-    stream.write(bytes(wave_data2[r:r+r]))
-    #t2 = time.time()*10000
-    #dt = t2-t1
-    #if dt < 10000:
-    #    time.sleep((10000-dt)/10000)
+    #print(start)
+    #print('processing, now {:0.1f}%\r'.format(start*100/len(wave_data[0])))
+t2 = time.time()*10
+print('\nFFT finished, generating, took {:0.1f} s'.format((t2-t1)/10))
 
+start = 0
+tmp_wav = wave_data[0][0:int(inter/2)*r]
+stream.write(bytes(tmp_wav))
+for fft in fft_result:
+    img = img_s.copy()
+    #print([start, start+N])
+    wave_data2 = wave_data[0][start:start+N]
+    h=int(t_size_h/2)
+    pt_t=(0,0,0,0)
+    for i in range(0, len(fft)-1):
+        degree = 1/len(fft)
+        x1 = int((c_d/2+fft[i]/10)*np.cos(degree*i*2*np.pi-np.pi/2) + t_size/2)
+        y1 = int((c_d/2+fft[i]/10)*np.sin(degree*i*2*np.pi-np.pi/2) + h)
+        x2 = int((c_d/2+fft[i+1]/10)*np.cos(degree*(i+1)*2*np.pi-np.pi/2) + t_size/2)
+        y2 = int((c_d/2+fft[i+1]/10)*np.sin(degree*(i+1)*2*np.pi-np.pi/2) + h)
+        if i==0:
+            pt_t=(x1,y1)
+        #(33, 150, 243), (76, 175, 80)
+        if degree*i <= 0.5:
+            cv2.line(img, (x1, y1), (x2, y2),
+                     (from_color[2]+(end_color[2]-from_color[2])*degree*i*2,
+                      from_color[1]+(end_color[1]-from_color[1])*degree*i*2,
+                      from_color[0]+(end_color[0]-from_color[0])*degree*i*2), 3)
+        else:
+            cv2.line(img, (x1, y1), (x2, y2),
+                     (end_color[2]+(from_color[2]-end_color[2])*(degree*i-0.5)*2,
+                      end_color[1]+(from_color[1]-end_color[1])*(degree*i-0.5)*2,
+                      end_color[0]+(from_color[0]-end_color[0])*(degree*i-0.5)*2), 3)
+        if i==len(fft)-2:
+            cv2.line(img, (x2, y2), (pt_t[0], pt_t[1]),
+                     (end_color[2]+(from_color[2]-end_color[2])*(degree*i-0.5)*2,
+                      end_color[1]+(from_color[1]-end_color[1])*(degree*i-0.5)*2,
+                      end_color[0]+(from_color[0]-end_color[0])*(degree*i-0.5)*2), 3)
+    cv2.imshow('tes', img)
+    videoWriter.write(img)
+    start += r
+    stream.write(bytes(wave_data2[int(inter/2)*r:(int(inter/2)+1)*r]))
     if cv2.waitKey(10)>0:
         break
 
-    # pylab.plot(freq[:d-1], c[:d-1])
-    # pylab.show()
-    # break
-
-#videoWriter.release()
+videoWriter.release()
 cv2.destroyAllWindows()
 stream.stop_stream()
 stream.close()
 p.terminate()
+
+#subprocess.call('ffmpeg -i e:\\test.avi -i e:\\test.mp3 -strict -2 -f avi e:\\test_ok.avi',
+#                shell=True)
